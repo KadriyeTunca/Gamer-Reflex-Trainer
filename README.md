@@ -2,15 +2,17 @@
 
 ## Proje Tanımı
 
-**Gamer Reflex Trainer**, oyuncuların ve bilgisayar kullanıcılarının refleks, tepki süresi ve doğruluk performanslarını ölçmek amacıyla geliştirilen, çok aşamalı bir bilgisayar görüşü ve etkileşim tabanlı test uygulamasıdır. Proje, bitirme çalışması kapsamında tasarlanmış olup, ölçülebilir ve analiz edilebilir performans verileri üretmeyi hedefler.
+**Gamer Reflex Trainer**, kullanıcıların refleks, tepki süresi ve doğruluk performanslarını ölçmek amacıyla geliştirilmiş, çok aşamalı ve etkileşim tabanlı bir performans analiz uygulamasıdır. Proje, bir bitirme çalışması kapsamında tasarlanmış olup, ölçülebilir ve akademik olarak analiz edilebilir veriler üretmeyi hedeflemektedir.
 
-Uygulama; mouse, klavye ve göz takibi olmak üzere üç ana aşamadan oluşacak şekilde planlanmıştır. Mevcut sürümde mouse tabanlı refleks testi tamamlanmıştır.
+Uygulama; mouse, klavye ve göz takibi (eye tracking) olmak üzere üç ana aşamadan oluşacak şekilde planlanmıştır. Mevcut sürümde mouse tabanlı refleks testi tamamlanmış ve sistem, sonraki aşamalara uygun modüler bir mimari ile yapılandırılmıştır.
 
 ---
 
 ## Projenin Amacı
 
-* Kullanıcı reflekslerini objektif metriklerle ölçmek
+Bu çalışmanın temel amaçları şunlardır:
+
+* Kullanıcı reflekslerini nesnel ve ölçülebilir metriklerle değerlendirmek
 * Tepki süresi ve hata oranı gibi performans göstergelerini kayıt altına almak
 * Adaptif zorluk mekanizması ile gerçekçi bir test ortamı oluşturmak
 * Toplanan verileri akademik analiz ve istatistiksel değerlendirme için uygun formatta saklamak
@@ -19,11 +21,11 @@ Uygulama; mouse, klavye ve göz takibi olmak üzere üç ana aşamadan oluşacak
 
 ## Sistem Mimarisi
 
-Proje, modüler ve genişletilebilir bir yapı ile tasarlanmıştır.
+Proje, modüler ve genişletilebilir bir yazılım mimarisi ile geliştirilmiştir.
 
-* **Tek giriş noktası:** `main.py`
+* Uygulamanın tek giriş noktası `main.py` dosyasıdır
 * Her test aşaması ayrı bir fonksiyon olarak tanımlanmıştır
-* Ortak veri kaydı sistemi (CSV) tüm aşamalar tarafından paylaşılmaktadır
+* Ortak bir CSV veri kayıt sistemi tüm aşamalar tarafından paylaşılmaktadır
 
 ```text
 main.py
@@ -34,7 +36,29 @@ main.py
      └── CSV veri kaydı
 ```
 
-Bu yapı sayesinde ilerleyen aşamalarda klavye ve göz takibi testleri mevcut kodu bozmadan sisteme eklenebilecektir.
+Bu yapı sayesinde klavye ve göz takibi testleri, mevcut kod yapısı bozulmadan sisteme entegre edilebilecektir.
+
+---
+
+## Proje Klasör Yapısı
+
+```text
+Gamer-Reflex-Trainer/
+│
+├── .git/                    # Git sürüm kontrol dizini
+├── .gitignore               # Git tarafından yok sayılan dosyalar
+│
+├── assets/                  # Görsel ve yardımcı medya dosyaları
+├── ml_data/                 # İleride kullanılacak makine öğrenmesi verileri
+├── modules/                 # Test aşamalarına ait modüller
+│
+├── results/
+│   └── performance_log.csv  # Tüm test sonuçları (tek CSV dosyası)
+│
+├── main.py                  # Ana uygulama dosyası
+├── requirements.txt         # Gerekli Python kütüphaneleri
+└── README.md                # Proje dokümantasyonu
+```
 
 ---
 
@@ -42,14 +66,14 @@ Bu yapı sayesinde ilerleyen aşamalarda klavye ve göz takibi testleri mevcut k
 
 ### Stage 1 – Mouse Refleks Testi (Tamamlandı)
 
-Bu aşamada kullanıcının mouse ile görsel hedeflere tepki süresi ölçülür.
+Bu aşamada kullanıcının mouse kullanarak görsel hedeflere verdiği tepkiler ölçülmektedir.
 
 **Özellikler:**
 
 * Hareketli hedefler
 * Rastgele konum, boyut ve yön
-* Hedef renk kavramı (doğru / yanlış tıklama ayrımı)
-* Yanlış tıklama durumunda hedef hızının artması (adaptif zorluk)
+* Hedef renk kavramı ile doğru / yanlış tıklama ayrımı
+* Yanlış tıklamalarda hedef hızının artması (adaptif zorluk)
 
 **Ölçülen Metrikler:**
 
@@ -66,7 +90,7 @@ Bu aşamada kullanıcının mouse ile görsel hedeflere tepki süresi ölçülü
 * W, A, S, D tuşları ile yön tabanlı refleks ölçümü
 * Merkeze yaklaşan hedef mantığı
 * Erken veya yanlış tuş basımında ceza mekanizması
-* Mouse aşaması sonrası otomatik geçiş
+* Mouse testinden sonra otomatik geçiş
 
 ---
 
@@ -74,13 +98,13 @@ Bu aşamada kullanıcının mouse ile görsel hedeflere tepki süresi ölçülü
 
 * OpenCV tabanlı yüz ve göz tespiti
 * Bakış yönü ve odaklanma süresi analizi
-* Mouse ve klavye verileri ile karşılaştırmalı refleks analizi
+* Mouse ve klavye verileri ile karşılaştırmalı refleks değerlendirmesi
 
 ---
 
 ## Veri Kaydı ve CSV Yapısı
 
-Tüm test aşamaları tek bir CSV dosyası üzerinde kayıt tutar.
+Tüm test aşamalarına ait veriler tek bir CSV dosyasında saklanmaktadır.
 
 **Dosya yolu:**
 
@@ -94,11 +118,7 @@ results/performance_log.csv
 Asama, Tur, DogruMu, TepkiSuresi, HedefRenk, TiklananRenk, Zaman
 ```
 
-Bu yapı sayesinde:
-
-* Uzun vadeli performans takibi yapılabilir
-* Veriler Excel, Python, R gibi araçlarla analiz edilebilir
-* Akademik çalışmalara doğrudan girdi sağlanabilir
+Bu yapı sayesinde uzun vadeli performans takibi ve akademik analizler kolaylıkla gerçekleştirilebilir.
 
 ---
 
@@ -107,19 +127,19 @@ Bu yapı sayesinde:
 * Python 3
 * OpenCV
 * NumPy
-* CSV / Dosya tabanlı veri kaydı
+* CSV tabanlı veri kaydı
 
 ---
 
 ## Kurulum ve Çalıştırma
 
-Gerekli kütüphaneleri yükleyin:
+Gerekli kütüphaneleri yüklemek için:
 
 ```bash
-pip install opencv-python numpy
+pip install -r requirements.txt
 ```
 
-Projeyi çalıştırmak için:
+Uygulamayı çalıştırmak için:
 
 ```bash
 python main.py
@@ -138,10 +158,10 @@ python main.py
 
 ## Akademik Kullanım
 
-Bu proje, insan-bilgisayar etkileşimi, oyun analitiği ve bilişsel performans ölçümü alanlarında örnek bir uygulama olarak kullanılabilecek şekilde tasarlanmıştır.
+Bu proje, insan–bilgisayar etkileşimi, oyun analitiği ve bilişsel performans ölçümü alanlarında örnek bir uygulama olarak kullanılabilecek şekilde tasarlanmıştır.
 
 ---
 
 ## Lisans
 
-Bu proje eğitim ve akademik amaçlı geliştirilmiştir.
+Bu proje eğitim ve akademik amaçlarla geliştirilmiştir.
