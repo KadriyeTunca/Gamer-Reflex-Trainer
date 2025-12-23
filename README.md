@@ -2,30 +2,48 @@
 
 ## Proje Tanımı
 
-**Gamer Reflex Trainer**, kullanıcıların refleks, tepki süresi ve doğruluk performanslarını ölçmek amacıyla geliştirilmiş, çok aşamalı ve etkileşim tabanlı bir performans analiz uygulamasıdır. Proje, bir bitirme çalışması kapsamında tasarlanmış olup, ölçülebilir ve akademik olarak analiz edilebilir veriler üretmeyi hedeflemektedir.
+**Gamer Reflex Trainer**, kullanıcıların refleks, tepki süresi ve doğruluk performanslarını ölçmek amacıyla geliştirilen, çok aşamalı ve etkileşim tabanlı bir performans analiz uygulamasıdır. Proje, akademik kullanım ve bitirme çalışması kapsamında tasarlanmış olup ölçülebilir, kayıt altına alınabilir ve analiz edilebilir veriler üretmeyi hedefler.
 
-Uygulama; mouse, klavye ve göz takibi (eye tracking) olmak üzere üç ana aşamadan oluşacak şekilde planlanmıştır. Mevcut sürümde mouse tabanlı refleks testi tamamlanmış ve sistem, sonraki aşamalara uygun modüler bir mimari ile yapılandırılmıştır.
+Uygulama; mouse, klavye ve göz takibi olmak üzere üç ana aşamadan oluşacak şekilde planlanmıştır. Mevcut sürümde **Mouse Refleks Testi (Stage 1)** tamamlanmış durumdadır.
 
 ---
 
 ## Projenin Amacı
 
-Bu çalışmanın temel amaçları şunlardır:
+* Kullanıcı reflekslerini objektif metriklerle ölçmek
+* Tepki süresi, doğruluk ve hata oranı gibi performans göstergelerini kaydetmek
+* Adaptif zorluk mekanizması ile gerçekçi test senaryoları oluşturmak
+* Toplanan verileri akademik analizlere uygun formatta saklamak
 
-* Kullanıcı reflekslerini nesnel ve ölçülebilir metriklerle değerlendirmek
-* Tepki süresi ve hata oranı gibi performans göstergelerini kayıt altına almak
-* Adaptif zorluk mekanizması ile gerçekçi bir test ortamı oluşturmak
-* Toplanan verileri akademik analiz ve istatistiksel değerlendirme için uygun formatta saklamak
+---
+
+## Proje Yapısı
+
+Proje, modüler ve genişletilebilir bir mimari ile tasarlanmıştır.
+
+```text
+Gamer-Reflex-Trainer/
+│
+├── .git/                 # Git versiyon kontrol dizini
+├── assets/               # Görsel ve yardımcı medya dosyaları
+├── ml_data/              # İleri aşamalarda kullanılacak veri setleri
+├── modules/              # Test aşamalarının modüler yapıları
+├── results/              # Performans çıktı dosyaları (CSV)
+│   └── performance_log.csv
+│
+├── main.py               # Uygulamanın ana giriş noktası
+├── requirements.txt      # Gerekli Python kütüphaneleri
+├── .gitignore
+└── README.md
+```
 
 ---
 
 ## Sistem Mimarisi
 
-Proje, modüler ve genişletilebilir bir yazılım mimarisi ile geliştirilmiştir.
-
-* Uygulamanın tek giriş noktası `main.py` dosyasıdır
+* **Tek giriş noktası:** `main.py`
 * Her test aşaması ayrı bir fonksiyon olarak tanımlanmıştır
-* Ortak bir CSV veri kayıt sistemi tüm aşamalar tarafından paylaşılmaktadır
+* Ortak bir CSV kayıt sistemi tüm aşamalar tarafından kullanılmaktadır
 
 ```text
 main.py
@@ -36,29 +54,7 @@ main.py
      └── CSV veri kaydı
 ```
 
-Bu yapı sayesinde klavye ve göz takibi testleri, mevcut kod yapısı bozulmadan sisteme entegre edilebilecektir.
-
----
-
-## Proje Klasör Yapısı
-
-```text
-Gamer-Reflex-Trainer/
-│
-├── .git/                    # Git sürüm kontrol dizini
-├── .gitignore               # Git tarafından yok sayılan dosyalar
-│
-├── assets/                  # Görsel ve yardımcı medya dosyaları
-├── ml_data/                 # İleride kullanılacak makine öğrenmesi verileri
-├── modules/                 # Test aşamalarına ait modüller
-│
-├── results/
-│   └── performance_log.csv  # Tüm test sonuçları (tek CSV dosyası)
-│
-├── main.py                  # Ana uygulama dosyası
-├── requirements.txt         # Gerekli Python kütüphaneleri
-└── README.md                # Proje dokümantasyonu
-```
+Bu yapı sayesinde klavye ve göz takibi testleri mevcut kod yapısı bozulmadan sisteme eklenebilecektir.
 
 ---
 
@@ -66,14 +62,14 @@ Gamer-Reflex-Trainer/
 
 ### Stage 1 – Mouse Refleks Testi (Tamamlandı)
 
-Bu aşamada kullanıcının mouse kullanarak görsel hedeflere verdiği tepkiler ölçülmektedir.
+Bu aşamada kullanıcının mouse ile görsel hedeflere verdiği tepki süresi ölçülür.
 
 **Özellikler:**
 
 * Hareketli hedefler
 * Rastgele konum, boyut ve yön
-* Hedef renk kavramı ile doğru / yanlış tıklama ayrımı
-* Yanlış tıklamalarda hedef hızının artması (adaptif zorluk)
+* Hedef renk kavramı (doğru / yanlış tıklama ayrımı)
+* Yanlış tıklama durumunda hedef hızının artması (adaptif zorluk)
 
 **Ölçülen Metrikler:**
 
@@ -90,7 +86,7 @@ Bu aşamada kullanıcının mouse kullanarak görsel hedeflere verdiği tepkiler
 * W, A, S, D tuşları ile yön tabanlı refleks ölçümü
 * Merkeze yaklaşan hedef mantığı
 * Erken veya yanlış tuş basımında ceza mekanizması
-* Mouse testinden sonra otomatik geçiş
+* Mouse aşaması sonrası otomatik geçiş
 
 ---
 
@@ -102,11 +98,9 @@ Bu aşamada kullanıcının mouse kullanarak görsel hedeflere verdiği tepkiler
 
 ---
 
-## Veri Kaydı ve CSV Yapısı
+## Veri Kaydı
 
-Tüm test aşamalarına ait veriler tek bir CSV dosyasında saklanmaktadır.
-
-**Dosya yolu:**
+Tüm test aşamaları tek bir CSV dosyasında kayıt altına alınır.
 
 ```text
 results/performance_log.csv
@@ -118,7 +112,11 @@ results/performance_log.csv
 Asama, Tur, DogruMu, TepkiSuresi, HedefRenk, TiklananRenk, Zaman
 ```
 
-Bu yapı sayesinde uzun vadeli performans takibi ve akademik analizler kolaylıkla gerçekleştirilebilir.
+Bu yapı sayesinde:
+
+* Uzun vadeli performans takibi yapılabilir
+* Veriler Python, Excel veya R ile analiz edilebilir
+* Akademik çalışmalara doğrudan girdi sağlanabilir
 
 ---
 
@@ -133,13 +131,27 @@ Bu yapı sayesinde uzun vadeli performans takibi ve akademik analizler kolaylık
 
 ## Kurulum ve Çalıştırma
 
-Gerekli kütüphaneleri yüklemek için:
+### 1. Projeyi klonlayın
+
+```bash
+git clone https://github.com/KadriyeTunca/Gamer-Reflex-Trainer.git
+cd Gamer-Reflex-Trainer
+```
+
+### 2. (Önerilen) Sanal ortam oluşturun
+
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+### 3. Gerekli kütüphaneleri yükleyin
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Uygulamayı çalıştırmak için:
+### 4. Uygulamayı çalıştırın
 
 ```bash
 python main.py
@@ -147,18 +159,27 @@ python main.py
 
 ---
 
+## Neden Sanal Ortam ve Clone Kullanılır?
+
+* Projenin bağımlılıkları sistemdeki diğer Python projeleriyle çakışmaz
+* Aynı proje farklı bilgisayarlarda **aynı şekilde çalışır**
+* Akademik ve profesyonel projelerde standart bir yaklaşımdır
+* `requirements.txt` sayesinde tüm kütüphaneler tek komutla kurulur
+
+---
+
 ## Gelecek Çalışmalar
 
-* Klavye refleks testinin sisteme eklenmesi
-* Göz takibi modülünün entegrasyonu
+* Klavye refleks testinin entegrasyonu
+* Göz takibi modülünün eklenmesi
 * Performans verileri için grafiksel raporlama
-* Kullanıcı profiline göre kişiselleştirilmiş zorluk ayarları
+* Kullanıcı bazlı kişiselleştirilmiş analiz
 
 ---
 
 ## Akademik Kullanım
 
-Bu proje, insan–bilgisayar etkileşimi, oyun analitiği ve bilişsel performans ölçümü alanlarında örnek bir uygulama olarak kullanılabilecek şekilde tasarlanmıştır.
+Bu proje, insan-bilgisayar etkileşimi, oyun analitiği ve bilişsel performans ölçümü alanlarında örnek bir uygulama olarak tasarlanmıştır.
 
 ---
 
