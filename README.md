@@ -131,6 +131,17 @@ Bu yapı sayesinde:
 
 ## Kurulum ve Çalıştırma
 
+### 🚀 Hızlı Kurulum (Önerilen)
+
+1. **Python 3.10 (64-bit)** indir ve kur: [İndir](https://www.python.org/downloads/)
+   - ✅ Kurulumda **"Add Python to PATH"** kutusunu işaretle!
+2. Proje klasöründe **`setup.bat`** dosyasını çift tıkla
+3. Kurulum tamamlandıktan sonra **`run.bat`** ile uygulamayı başlat
+
+---
+
+### Manuel Kurulum (Detaylı)
+
 ### 1. Python 3.10 (64-bit) Kurulumu
 
 > ⚠️ **ÖNEMLİ:** MediaPipe sadece **64-bit Python** ile çalışır! 32-bit sürüm çalışmaz.
