@@ -1,3 +1,11 @@
+"""
+Gamer Reflex Trainer - Ana Uygulama
+Üç aşamalı refleks test sistemi:
+1. Mouse Refleks Testi
+2. Klavye Refleks Testi  
+3. Göz Odak Takip Testi (MediaPipe)
+"""
+
 import cv2
 import numpy as np
 import time
@@ -5,9 +13,24 @@ import random
 import csv
 import os
 from datetime import datetime
+from collections import deque
 
+# MediaPipe sadece göz takibi için gerekli
+try:
+    import mediapipe as mp
+    MEDIAPIPE_AVAILABLE = True
+except ImportError:
+    MEDIAPIPE_AVAILABLE = False
+    print("UYARI: MediaPipe kurulu değil. Göz takibi özelliği devre dışı.")
+    print("Kurmak için: pip install mediapipe==0.10.9")
+
+
+# =====================================================================
+# STAGE 1: MOUSE REFLEKS TESTİ
+# =====================================================================
 
 def stage_1_mouse_test():
+    """Mouse ile görsel hedeflere tepki süresi ölçümü"""
     
     # EKRAN BOYUTU
     WIDTH, HEIGHT = 1000, 800
@@ -20,62 +43,49 @@ def stage_1_mouse_test():
         "yesil": (106, 187, 106)
     }
 
-    
-    # OYUN DURUMU BAŞLANGIÇTA FALSE VE BOŞ TANIMLIYORUZ ÇÜNKÜ HENÜZ BAŞLATILMADI
+    # OYUN DURUMU
     game_started = False
     game_over = False
     targets = []
     target_color_name = None
     start_time = None
 
-    
     # PERFORMANS
     total_rounds = 0
     correct_clicks = 0
     wrong_clicks = 0
     reaction_times = []
 
-    
     # HIZ KONTROLÜ
     base_speed = 3
     speed_multiplier = 1.0
 
-    
-    # CSV (TEK DOSYADA SIRALI VERİ TOPLAMA KODU)
-    os.makedirs("results", exist_ok=True) # "exist_ok=True" ifadesi dosya zaten varsa hata vermemesi için
+    # CSV
+    os.makedirs("results", exist_ok=True)
     csv_path = "results/performance_log.csv"
 
-# "w" Csv dosyası için yeni dosya oluşturur
-# newline boş olması satır atlama hatasını önler csv'ye karışmaz
-# With dosya kısmında hata olsa bile bu bloğu çalıştır geç der 
-
-    if not os.path.exists(csv_path): # dosya var mı yok mu kontrol yoksa alttaki kodlar çalışır
-        with open(csv_path, "w", newline="", encoding="utf-8") as f: 
+    if not os.path.exists(csv_path):
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([
-                "Asama",
-                "Tur",
-                "DogruMu",
-                "TepkiSuresi",
-                "HedefRenk",
-                "TiklananRenk",
-                "Zaman"
+                "Asama", "Tur", "DogruMu", "TepkiSuresi",
+                "HedefRenk", "TiklananRenk", "Zaman"
             ])
 
-    
-    # EKRANLAR
     def draw_start_screen():
         screen = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
         cv2.putText(screen, "GAMER REFLEX TRAINER", (210, 150),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3) # Başlık metni 1.5 ölçekli ve yeşil renkte 3 kalınlıkta
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
+        cv2.putText(screen, "STAGE 1: MOUSE TEST", (300, 220),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
         cv2.putText(screen, "BASLA", (430, 400),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
-        cv2.rectangle(screen, (380, 330), (620, 450), (255, 0, 0), 3) # Başla butonunun etrafına dikdörtgen çiz sol üst köşe (380,330) sağ alt köşe (620,450)
-        return screen  # Başla ekranını döndür
+        cv2.rectangle(screen, (380, 330), (620, 450), (255, 0, 0), 3)
+        return screen
 
     def draw_end_screen():
         screen = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
-        avg_reaction = np.mean(reaction_times) if reaction_times else 0  # Ortalama tepki süresi hesaplama
+        avg_reaction = np.mean(reaction_times) if reaction_times else 0
         total_clicks = correct_clicks + wrong_clicks
         error_rate = (wrong_clicks / total_clicks * 100) if total_clicks > 0 else 0
 
@@ -95,29 +105,25 @@ def stage_1_mouse_test():
                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, (200, 200, 200), 1)
         return screen
 
- 
-    # OYUN MANTIĞI VE HEDEF OLUŞTURMA
     def generate_round():
-        nonlocal targets, target_color_name, start_time, total_rounds #nonlocal ile dış değişkenlere erişim sağlanır 
-        total_rounds += 1                                          # ilk tanımlandıkları yerden sonraki bloklarda kullanılabilirler
+        nonlocal targets, target_color_name, start_time, total_rounds
+        total_rounds += 1
         target_color_name = random.choice(list(COLORS.keys()))
-        distractors = [c for c in COLORS.keys() if c != target_color_name] # hedef renk dışındaki renkleri alır c için
-        random.shuffle(distractors) # dikkat dağıtıcı renklerin sırasını karıştırır
+        distractors = [c for c in COLORS.keys() if c != target_color_name]
+        random.shuffle(distractors)
         targets = []
 
         def create_target(color_name):
-            x = random.randint(100, WIDTH - 100) # hedefin x koordinatını rastgele belirler
+            x = random.randint(100, WIDTH - 100)
             y = random.randint(150, HEIGHT - 100)
-            r = random.randint(30, 60) # hedefin yarıçapını rastgele belirler 
-            dx = random.choice([-1, 1]) * base_speed * speed_multiplier # hedefin x eksenindeki hızını belirler<
+            r = random.randint(30, 60)
+            dx = random.choice([-1, 1]) * base_speed * speed_multiplier
             dy = random.choice([-1, 1]) * base_speed * speed_multiplier
             return [x, y, r, color_name, COLORS[color_name], dx, dy]
 
         targets.append(create_target(target_color_name))
-
         for i in range(random.randint(2, 3)):
             targets.append(create_target(distractors[i]))
-
         start_time = time.time()
 
     def draw_game():
@@ -129,18 +135,13 @@ def stage_1_mouse_test():
         for t in targets:
             t[0] += t[5]
             t[1] += t[6]
-
             if t[0] - t[2] <= 0 or t[0] + t[2] >= WIDTH:
                 t[5] *= -1
             if t[1] - t[2] <= 100 or t[1] + t[2] >= HEIGHT:
                 t[6] *= -1
-
             cv2.circle(screen, (int(t[0]), int(t[1])), t[2], t[4], -1)
-
         return screen
 
-    
-    # MOUSE TIKLAMA İŞLEMLERİ
     def mouse_callback(event, x, y, flags, param):
         nonlocal game_started, game_over
         nonlocal correct_clicks, wrong_clicks, speed_multiplier
@@ -175,9 +176,6 @@ def stage_1_mouse_test():
                         generate_round()
                     break
 
-    
-    # ANA DÖNGÜ
-
     cv2.namedWindow("Stage 1 - Mouse Test")
     cv2.setMouseCallback("Stage 1 - Mouse Test", mouse_callback)
 
@@ -194,11 +192,752 @@ def stage_1_mouse_test():
             break
 
     cv2.destroyAllWindows()
-    return
 
 
-# =====================
+# =====================================================================
+# STAGE 2: KLAVYE REFLEKS TESTİ
+# =====================================================================
+
+def stage_2_keyboard_test():
+    """W, A, S, D tuşları ile yön tabanlı refleks ölçümü"""
+    
+    WIDTH, HEIGHT = 1000, 800
+
+    PLAYER_COLOR = (180, 105, 240)
+    TEXT_COLOR = (255, 255, 255)
+    SUCCESS_COLOR = (0, 255, 0)
+    ERROR_COLOR = (0, 0, 255)
+
+    PLAYER_RADIUS = 18
+    BASE_SPEED = 4.0
+    SPEED_INCREASE = 0.2
+    MAX_MOVES = 20
+
+    COMMANDS = ["YUKARI", "ASAGI", "SOL", "SAG"]
+    COMMAND_DISPLAY = {
+        "YUKARI": "YUKARI (W)",
+        "ASAGI": "ASAGI (S)",
+        "SOL": "SOL (A)",
+        "SAG": "SAG (D)"
+    }
+    KEY_MAP = {
+        "YUKARI": [ord("w"), ord("W")],
+        "ASAGI": [ord("s"), ord("S")],
+        "SOL": [ord("a"), ord("A")],
+        "SAG": [ord("d"), ord("D")]
+    }
+
+    def get_new_command(direction, player_x, player_y, player_radius):
+        available = COMMANDS.copy()
+        if player_y - player_radius <= 140 and "YUKARI" in available:
+            available.remove("YUKARI")
+        if player_y + player_radius >= HEIGHT - 20 and "ASAGI" in available:
+            available.remove("ASAGI")
+        if player_x - player_radius <= 20 and "SOL" in available:
+            available.remove("SOL")
+        if player_x + player_radius >= WIDTH - 20 and "SAG" in available:
+            available.remove("SAG")
+        if direction in available:
+            available.remove(direction)
+        if not available:
+            opposite = {"YUKARI": "ASAGI", "ASAGI": "YUKARI", "SOL": "SAG", "SAG": "SOL"}
+            return opposite.get(direction, random.choice(COMMANDS))
+        return random.choice(available)
+
+    player_x, player_y = WIDTH // 2, HEIGHT // 2
+    player_radius = PLAYER_RADIUS
+    direction = random.choice(COMMANDS)
+    speed = BASE_SPEED
+    current_command = get_new_command(direction, player_x, player_y, player_radius)
+    
+    total_moves = 0
+    correct_moves = 0
+    feedback_time = 0
+    feedback_type = None
+    
+    game_start_time = time.time()
+    command_start_time = time.time()
+    reaction_times = []
+    move_log = []
+
+    cv2.namedWindow("Stage 2 - Keyboard Reflex")
+
+    while total_moves < MAX_MOVES:
+        screen = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+
+        # Otomatik hareket
+        if direction == "YUKARI":
+            player_y -= speed
+        elif direction == "ASAGI":
+            player_y += speed
+        elif direction == "SOL":
+            player_x -= speed
+        elif direction == "SAG":
+            player_x += speed
+
+        # Sınır kontrolü
+        if player_x - player_radius <= 0:
+            player_x = player_radius
+            direction = "SAG"
+        elif player_x + player_radius >= WIDTH:
+            player_x = WIDTH - player_radius
+            direction = "SOL"
+        if player_y - player_radius <= 120:
+            player_y = 120 + player_radius
+            direction = "ASAGI"
+        elif player_y + player_radius >= HEIGHT:
+            player_y = HEIGHT - player_radius
+            direction = "YUKARI"
+
+        key = cv2.waitKey(20) & 0xFF
+        if key == 27:
+            break
+
+        pressed_command = None
+        for cmd, key_codes in KEY_MAP.items():
+            if key in key_codes:
+                pressed_command = cmd
+                break
+
+        if pressed_command:
+            total_moves += 1
+            reaction_time = time.time() - command_start_time
+
+            if pressed_command == current_command:
+                reaction_times.append(reaction_time)
+                direction = current_command
+                speed += SPEED_INCREASE
+                correct_moves += 1
+                feedback_type = "success"
+            else:
+                direction = pressed_command
+                feedback_type = "error"
+            
+            feedback_time = time.time()
+            
+            current_accuracy = (correct_moves / total_moves) * 100
+            avg_reaction_so_far = sum(reaction_times) / len(reaction_times) if reaction_times else 0
+            
+            move_log.append({
+                "saat": datetime.now().strftime("%H:%M"),
+                "tur": total_moves,
+                "hedef_tus": current_command,
+                "basilan_tus": pressed_command,
+                "dogru_mu": 1 if pressed_command == current_command else 0,
+                "reaksiyon_suresi": reaction_time,
+                "dogruluk_orani": current_accuracy,
+                "ort_reaksiyon": avg_reaction_so_far
+            })
+            
+            current_command = get_new_command(direction, player_x, player_y, player_radius)
+            command_start_time = time.time()
+
+        # Çizimler
+        cv2.circle(screen, (int(player_x), int(player_y)), int(player_radius), PLAYER_COLOR, -1)
+        cv2.putText(screen, f"KOMUT: {COMMAND_DISPLAY[current_command]}", (280, 70),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.4, TEXT_COLOR, 3)
+        cv2.putText(screen, f"{correct_moves}/{total_moves}", (WIDTH - 150, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, TEXT_COLOR, 3)
+        cv2.putText(screen, f"Hiz: {speed:.1f}", (30, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (200, 200, 200), 2)
+
+        if feedback_type and time.time() - feedback_time < 0.3:
+            if feedback_type == "success":
+                cv2.circle(screen, (WIDTH // 2, HEIGHT // 2), 60, SUCCESS_COLOR, 8)
+            else:
+                cv2.line(screen, (WIDTH // 2 - 30, HEIGHT // 2 - 30),
+                        (WIDTH // 2 + 30, HEIGHT // 2 + 30), ERROR_COLOR, 8)
+                cv2.line(screen, (WIDTH // 2 + 30, HEIGHT // 2 - 30),
+                        (WIDTH // 2 - 30, HEIGHT // 2 + 30), ERROR_COLOR, 8)
+        else:
+            feedback_type = None
+
+        cv2.imshow("Stage 2 - Keyboard Reflex", screen)
+
+    # Sonuç
+    total_time = time.time() - game_start_time
+    accuracy = (correct_moves / total_moves * 100) if total_moves > 0 else 0
+    avg_reaction = sum(reaction_times) / len(reaction_times) if reaction_times else 0
+
+    # CSV kaydet
+    os.makedirs("results", exist_ok=True)
+    csv_file = "results/performance_log_keyboard.csv"
+    
+    file_exists = os.path.isfile(csv_file)
+    with open(csv_file, 'a', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(["Saat", "Tur", "HedefTus", "BasilanTus", "DogruMu",
+                           "ReaksiyonSuresi", "DogrulukOrani", "OrtReaksiyon"])
+        for move in move_log:
+            writer.writerow([
+                move['saat'], move['tur'], move['hedef_tus'], move['basilan_tus'],
+                move['dogru_mu'], f"{move['reaksiyon_suresi']:.3f}",
+                f"{move['dogruluk_orani']:.1f}", f"{move['ort_reaksiyon']:.3f}"
+            ])
+
+    print(f"\nOYUN BİTTİ! Doğruluk: {accuracy:.1f}%, Ort. Reaksiyon: {avg_reaction:.3f}s")
+    cv2.destroyAllWindows()
+
+
+# =====================================================================
+# STAGE 3: GÖZ ODAK TAKİP TESTİ
+# =====================================================================
+
+def stage_3_eye_tracking():
+    """MediaPipe ile göz takibi ve odaklanma testi"""
+    
+    if not MEDIAPIPE_AVAILABLE:
+        print("HATA: MediaPipe kurulu değil!")
+        print("Kurmak için: pip install mediapipe==0.10.9")
+        return
+
+    # Sabitler
+    SCREEN_WIDTH = 1280
+    SCREEN_HEIGHT = 720
+    BALL_RADIUS = 45
+    BALL_SPEED_OPTIONS = [-5, -4, -3, 3, 4, 5]
+    FOCUS_THRESHOLD = 100
+    FOCUS_REQUIRED_TIME = 1.0
+    POINT_REWARD = 5
+    SMOOTHING_FACTOR = 0.22
+    GAZE_HISTORY_SIZE = 6
+    FOCUS_LOSS_TOLERANCE = 0.5
+    FOCUS_DECAY_RATE = 0.3
+    DETECTION_CONFIDENCE = 0.7
+    TRACKING_CONFIDENCE = 0.7
+    CALIBRATION_HOLD_TIME = 2.0
+    CALIBRATION_STABILITY_THRESHOLD = 0.04
+
+    COLORS = {
+        'yellow': (0, 255, 255), 'magenta': (255, 0, 255),
+        'green': (0, 255, 0), 'orange': (0, 165, 255),
+        'blue': (255, 0, 0), 'red': (0, 0, 255),
+        'cyan': (255, 255, 0), 'purple': (128, 0, 255),
+        'white': (255, 255, 255), 'gray': (150, 150, 150),
+        'dark_gray': (50, 50, 50),
+    }
+
+    LANDMARK_INDICES = {
+        'left_iris_center': 468, 'right_iris_center': 473,
+        'left_eye_left': 33, 'left_eye_right': 133,
+        'right_eye_left': 362, 'right_eye_right': 263,
+        'left_eye_top': 159, 'left_eye_bottom': 145,
+        'right_eye_top': 386, 'right_eye_bottom': 374,
+    }
+
+    def get_random_bright_color():
+        color_list = ['yellow', 'magenta', 'green', 'orange', 'blue', 'red', 'cyan', 'purple']
+        return COLORS[random.choice(color_list)]
+
+    def calculate_distance(x1, y1, x2, y2):
+        return np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+
+    def clamp(value, min_val, max_val):
+        return max(min_val, min(max_val, value))
+
+    class EyeFocusTrainer:
+        def __init__(self):
+            self._init_camera()
+            self._init_mediapipe()
+            self._init_ball()
+            self._init_game_state()
+            self._init_eye_tracking()
+            self._init_calibration()
+
+        def _init_camera(self):
+            self.cap = cv2.VideoCapture(0)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, SCREEN_WIDTH)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, SCREEN_HEIGHT)
+            self.screen_width = SCREEN_WIDTH
+            self.screen_height = SCREEN_HEIGHT
+
+        def _init_mediapipe(self):
+            self.mp_face_mesh = mp.solutions.face_mesh
+            self.face_mesh = self.mp_face_mesh.FaceMesh(
+                max_num_faces=1,
+                refine_landmarks=True,
+                min_detection_confidence=DETECTION_CONFIDENCE,
+                min_tracking_confidence=TRACKING_CONFIDENCE
+            )
+
+        def _init_ball(self):
+            self.ball_radius = BALL_RADIUS
+            self.ball_x = self.screen_width // 2
+            self.ball_y = self.screen_height // 2
+            self.ball_speed_x = random.choice(BALL_SPEED_OPTIONS)
+            self.ball_speed_y = random.choice(BALL_SPEED_OPTIONS)
+            self.ball_color = get_random_bright_color()
+
+        def _init_game_state(self):
+            self.score = 0
+            self.focus_start_time = None
+            self.focus_duration = 0.0
+            self.is_focused = False
+            self.warning_message = ""
+            self.warning_time = 0
+            self.success_message = ""
+            self.success_time = 0
+            self.focus_loss_start = None
+            self.accumulated_focus = 0.0
+
+        def _init_eye_tracking(self):
+            self.iris_x = 0.5
+            self.iris_y = 0.5
+            self.face_detected = False
+            self.eyes_valid = False
+            self.gaze_x = self.screen_width // 2
+            self.gaze_y = self.screen_height // 2
+            self.gaze_history_x = deque(maxlen=GAZE_HISTORY_SIZE)
+            self.gaze_history_y = deque(maxlen=GAZE_HISTORY_SIZE)
+            self.prev_gaze_x = self.screen_width // 2
+            self.prev_gaze_y = self.screen_height // 2
+
+        def _init_calibration(self):
+            self.calibration_points = {
+                'center': {'screen': (self.screen_width // 2, self.screen_height // 2), 'iris': None},
+                'left': {'screen': (200, self.screen_height // 2), 'iris': None},
+                'right': {'screen': (self.screen_width - 200, self.screen_height // 2), 'iris': None},
+                'top': {'screen': (self.screen_width // 2, 150), 'iris': None},
+                'bottom': {'screen': (self.screen_width // 2, self.screen_height - 150), 'iris': None},
+            }
+            self.calibration_order = ['center', 'left', 'right', 'top', 'bottom']
+            self.current_calibration_index = 0
+            self.is_calibrated = False
+            self.calibration_hold_time = 0
+            self.iris_center = (0.5, 0.5)
+            self.iris_left = None
+            self.iris_right = None
+            self.iris_top = None
+            self.iris_bottom = None
+            self.calibration_iris_history = []
+
+        def update_ball(self):
+            self.ball_x += self.ball_speed_x
+            self.ball_y += self.ball_speed_y
+            if self.ball_x <= self.ball_radius or self.ball_x >= self.screen_width - self.ball_radius:
+                self.ball_speed_x = -self.ball_speed_x
+                self.ball_color = get_random_bright_color()
+            if self.ball_y <= self.ball_radius or self.ball_y >= self.screen_height - self.ball_radius:
+                self.ball_speed_y = -self.ball_speed_y
+                self.ball_color = get_random_bright_color()
+            self.ball_x = clamp(self.ball_x, self.ball_radius, self.screen_width - self.ball_radius)
+            self.ball_y = clamp(self.ball_y, self.ball_radius, self.screen_height - self.ball_radius)
+
+        def reset_ball(self):
+            margin = 150
+            self.ball_x = random.randint(self.ball_radius + margin, self.screen_width - self.ball_radius - margin)
+            self.ball_y = random.randint(self.ball_radius + margin, self.screen_height - self.ball_radius - margin)
+            self.ball_speed_x = random.choice(BALL_SPEED_OPTIONS)
+            self.ball_speed_y = random.choice(BALL_SPEED_OPTIONS)
+            self.ball_color = get_random_bright_color()
+
+        def get_iris_position(self, landmarks):
+            idx = LANDMARK_INDICES
+            left_iris = landmarks[idx['left_iris_center']]
+            left_eye_left = landmarks[idx['left_eye_left']]
+            left_eye_right = landmarks[idx['left_eye_right']]
+            left_eye_top = landmarks[idx['left_eye_top']]
+            left_eye_bottom = landmarks[idx['left_eye_bottom']]
+            right_iris = landmarks[idx['right_iris_center']]
+            right_eye_left = landmarks[idx['right_eye_left']]
+            right_eye_right = landmarks[idx['right_eye_right']]
+            right_eye_top = landmarks[idx['right_eye_top']]
+            right_eye_bottom = landmarks[idx['right_eye_bottom']]
+
+            left_eye_width = left_eye_right.x - left_eye_left.x
+            if left_eye_width > 0.005:
+                left_iris_x = (left_iris.x - left_eye_left.x) / left_eye_width
+            else:
+                return None, None
+
+            left_eye_height = left_eye_bottom.y - left_eye_top.y
+            if left_eye_height > 0.002:
+                left_iris_y = (left_iris.y - left_eye_top.y) / left_eye_height
+            else:
+                return None, None
+
+            right_eye_width = right_eye_right.x - right_eye_left.x
+            if right_eye_width > 0.005:
+                right_iris_x = (right_iris.x - right_eye_left.x) / right_eye_width
+            else:
+                return None, None
+
+            right_eye_height = right_eye_bottom.y - right_eye_top.y
+            if right_eye_height > 0.002:
+                right_iris_y = (right_iris.y - right_eye_top.y) / right_eye_height
+            else:
+                return None, None
+
+            avg_iris_x = (left_iris_x + right_iris_x) / 2
+            avg_iris_y = (left_iris_y + right_iris_y) / 2
+
+            if not (0.1 < avg_iris_x < 0.9 and 0.1 < avg_iris_y < 0.9):
+                return None, None
+
+            return avg_iris_x, avg_iris_y
+
+        def detect_face(self, frame):
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = self.face_mesh.process(rgb_frame)
+            self.face_detected = False
+            self.eyes_valid = False
+
+            if results.multi_face_landmarks:
+                face_landmarks = results.multi_face_landmarks[0]
+                self.face_detected = True
+                landmarks = face_landmarks.landmark
+                iris_x, iris_y = self.get_iris_position(landmarks)
+                if iris_x is not None and iris_y is not None:
+                    self.iris_x = iris_x
+                    self.iris_y = iris_y
+                    self.eyes_valid = True
+            return frame
+
+        def run_calibration(self, frame):
+            if self.current_calibration_index >= len(self.calibration_order):
+                self._finish_calibration()
+                return frame
+
+            current_point_name = self.calibration_order[self.current_calibration_index]
+            current_point = self.calibration_points[current_point_name]
+            screen_x, screen_y = current_point['screen']
+
+            overlay = frame.copy()
+            cv2.rectangle(overlay, (0, 0), (self.screen_width, self.screen_height), (20, 20, 20), -1)
+            frame = cv2.addWeighted(overlay, 0.6, frame, 0.4, 0)
+
+            pulse = int(20 * np.sin(time.time() * 4) + 60)
+            cv2.circle(frame, (screen_x, screen_y), pulse, (0, 80, 200), -1)
+            cv2.circle(frame, (screen_x, screen_y), 45, COLORS['red'], -1)
+            cv2.circle(frame, (screen_x, screen_y), 45, COLORS['white'], 4)
+            cv2.circle(frame, (screen_x, screen_y), 15, COLORS['white'], -1)
+
+            cv2.putText(frame, "KALIBRASYON", (self.screen_width // 2 - 150, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.5, COLORS['cyan'], 3)
+            cv2.putText(frame, "Sadece GOZLERINIZLE kirmizi noktaya bakin!",
+                        (self.screen_width // 2 - 300, 100),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, COLORS['white'], 2)
+
+            point_names = {'center': 'MERKEZ', 'left': 'SOL', 'right': 'SAG', 'top': 'YUKARI', 'bottom': 'ASAGI'}
+            progress_text = f"Nokta: {point_names[current_point_name]} ({self.current_calibration_index + 1}/5)"
+            cv2.putText(frame, progress_text, (20, self.screen_height - 60),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, COLORS['cyan'], 2)
+
+            if self.face_detected and self.eyes_valid:
+                self.calibration_iris_history.append((self.iris_x, self.iris_y))
+                if len(self.calibration_iris_history) > 15:
+                    self.calibration_iris_history.pop(0)
+
+                is_stable = True
+                if len(self.calibration_iris_history) >= 8:
+                    recent = self.calibration_iris_history[-8:]
+                    x_values = [p[0] for p in recent]
+                    y_values = [p[1] for p in recent]
+                    x_range = max(x_values) - min(x_values)
+                    y_range = max(y_values) - min(y_values)
+                    if x_range > CALIBRATION_STABILITY_THRESHOLD or y_range > CALIBRATION_STABILITY_THRESHOLD:
+                        is_stable = False
+
+                if is_stable:
+                    self.calibration_hold_time += 1 / 30.0
+                    progress = min(self.calibration_hold_time / CALIBRATION_HOLD_TIME, 1.0)
+                    bar_width = 400
+                    bar_x = self.screen_width // 2 - bar_width // 2
+                    bar_y = self.screen_height // 2 + 100
+                    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_width, bar_y + 35), COLORS['dark_gray'], -1)
+                    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + int(bar_width * progress), bar_y + 35), COLORS['green'], -1)
+
+                    if self.calibration_hold_time >= CALIBRATION_HOLD_TIME:
+                        recent = self.calibration_iris_history[-8:] if len(self.calibration_iris_history) >= 8 else self.calibration_iris_history
+                        avg_x = sum(p[0] for p in recent) / len(recent)
+                        avg_y = sum(p[1] for p in recent) / len(recent)
+                        self.calibration_points[current_point_name]['iris'] = (avg_x, avg_y)
+                        self.current_calibration_index += 1
+                        self.calibration_hold_time = 0
+                        self.calibration_iris_history.clear()
+                else:
+                    self.calibration_hold_time = max(0, self.calibration_hold_time - 0.05)
+                    cv2.putText(frame, "SABIT BAKIN!", (self.screen_width // 2 - 100, self.screen_height // 2 + 80),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, COLORS['orange'], 2)
+            else:
+                self.calibration_hold_time = max(0, self.calibration_hold_time - 0.1)
+                status = "YUZ TESPIT EDILEMIYOR!" if not self.face_detected else "GOZ TESPIT EDILEMIYOR!"
+                cv2.putText(frame, status, (self.screen_width // 2 - 200, self.screen_height // 2 + 50),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, COLORS['red'], 3)
+
+            return frame
+
+        def _finish_calibration(self):
+            self.iris_center = self.calibration_points['center']['iris']
+            self.iris_left = self.calibration_points['left']['iris']
+            self.iris_right = self.calibration_points['right']['iris']
+            self.iris_top = self.calibration_points['top']['iris']
+            self.iris_bottom = self.calibration_points['bottom']['iris']
+            self.is_calibrated = True
+            print("Kalibrasyon tamamlandi!")
+
+        def calculate_gaze(self):
+            if not self.is_calibrated or not self.eyes_valid:
+                return
+            if not all([self.iris_center, self.iris_left, self.iris_right, self.iris_top, self.iris_bottom]):
+                return
+
+            center_x = self.iris_center[0]
+            left_x = self.iris_left[0]
+            right_x = self.iris_right[0]
+
+            if self.iris_x < center_x:
+                range_x = center_x - left_x
+                norm_x = -(center_x - self.iris_x) / range_x if range_x > 0.001 else 0
+            else:
+                range_x = right_x - center_x
+                norm_x = (self.iris_x - center_x) / range_x if range_x > 0.001 else 0
+
+            center_y = self.iris_center[1]
+            top_y = self.iris_top[1]
+            bottom_y = self.iris_bottom[1]
+
+            if self.iris_y < center_y:
+                range_y = center_y - top_y
+                norm_y = -(center_y - self.iris_y) / range_y if range_y > 0.001 else 0
+            else:
+                range_y = bottom_y - center_y
+                norm_y = (self.iris_y - center_y) / range_y if range_y > 0.001 else 0
+
+            norm_x = clamp(norm_x, -1.5, 1.5)
+            norm_y = clamp(norm_y, -1.5, 1.5)
+
+            target_x = int(self.screen_width / 2 + norm_x * (self.screen_width / 2 - 100))
+            target_y = int(self.screen_height / 2 + norm_y * (self.screen_height / 2 - 50))
+
+            self.gaze_history_x.append(target_x)
+            self.gaze_history_y.append(target_y)
+
+            if len(self.gaze_history_x) >= 3:
+                weights = np.linspace(0.5, 1.0, len(self.gaze_history_x))
+                weights = weights / weights.sum()
+                avg_x = np.average(list(self.gaze_history_x), weights=weights)
+                avg_y = np.average(list(self.gaze_history_y), weights=weights)
+            else:
+                avg_x = target_x
+                avg_y = target_y
+
+            max_jump = 150
+            delta_x = avg_x - self.prev_gaze_x
+            delta_y = avg_y - self.prev_gaze_y
+            if abs(delta_x) > max_jump:
+                avg_x = self.prev_gaze_x + (max_jump if delta_x > 0 else -max_jump)
+            if abs(delta_y) > max_jump:
+                avg_y = self.prev_gaze_y + (max_jump if delta_y > 0 else -max_jump)
+
+            self.gaze_x = int(self.prev_gaze_x + (avg_x - self.prev_gaze_x) * SMOOTHING_FACTOR)
+            self.gaze_y = int(self.prev_gaze_y + (avg_y - self.prev_gaze_y) * SMOOTHING_FACTOR)
+
+            self.gaze_x = clamp(self.gaze_x, 50, self.screen_width - 50)
+            self.gaze_y = clamp(self.gaze_y, 50, self.screen_height - 50)
+            self.prev_gaze_x = self.gaze_x
+            self.prev_gaze_y = self.gaze_y
+
+        def check_focus(self):
+            if not self.eyes_valid or not self.is_calibrated:
+                if self.is_focused and self.focus_loss_start is None:
+                    self.focus_loss_start = time.time()
+                if self.focus_loss_start:
+                    loss_duration = time.time() - self.focus_loss_start
+                    if loss_duration > FOCUS_LOSS_TOLERANCE:
+                        self._reset_focus()
+                return
+
+            self.calculate_gaze()
+            distance = calculate_distance(self.gaze_x, self.gaze_y, self.ball_x, self.ball_y)
+
+            if distance < FOCUS_THRESHOLD:
+                self.focus_loss_start = None
+                if not self.is_focused:
+                    self.is_focused = True
+                    self.focus_start_time = time.time()
+                    self.accumulated_focus = 0.0
+                else:
+                    self.focus_duration = time.time() - self.focus_start_time
+                    self.accumulated_focus = self.focus_duration
+                    if self.accumulated_focus >= FOCUS_REQUIRED_TIME:
+                        self.score += POINT_REWARD
+                        self.success_message = f"+{POINT_REWARD} PUAN!"
+                        self.success_time = time.time()
+                        self._reset_focus()
+                        self.reset_ball()
+            else:
+                if self.is_focused:
+                    if self.focus_loss_start is None:
+                        self.focus_loss_start = time.time()
+                    else:
+                        loss_duration = time.time() - self.focus_loss_start
+                        if loss_duration > FOCUS_LOSS_TOLERANCE:
+                            if self.accumulated_focus > 0.3:
+                                self.warning_message = "Odak kaybedildi!"
+                                self.warning_time = time.time()
+                            self._reset_focus()
+                        elif self.accumulated_focus > 0:
+                            self.accumulated_focus -= FOCUS_DECAY_RATE * (1/30)
+
+        def _reset_focus(self):
+            self.is_focused = False
+            self.focus_start_time = None
+            self.focus_duration = 0.0
+            self.focus_loss_start = None
+            self.accumulated_focus = 0.0
+
+        def draw_ui(self, frame):
+            # Bakış hedefi
+            if self.eyes_valid and self.is_calibrated:
+                x, y = int(self.gaze_x), int(self.gaze_y)
+                cv2.circle(frame, (x, y), 35, COLORS['magenta'], 3)
+                cv2.circle(frame, (x, y), 15, COLORS['magenta'], -1)
+                cv2.line(frame, (x - 50, y), (x + 50, y), COLORS['magenta'], 2)
+                cv2.line(frame, (x, y - 50), (x, y + 50), COLORS['magenta'], 2)
+
+            # Top
+            x, y = int(self.ball_x), int(self.ball_y)
+            cv2.circle(frame, (x, y), self.ball_radius, self.ball_color, -1)
+            cv2.circle(frame, (x, y), self.ball_radius, COLORS['white'], 3)
+            if self.is_focused:
+                cv2.circle(frame, (x, y), self.ball_radius + 20, COLORS['green'], 4)
+
+            # Üst bar
+            cv2.rectangle(frame, (0, 0), (self.screen_width, 80), (30, 30, 30), -1)
+            cv2.putText(frame, f"SKOR: {self.score}", (20, 55),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.5, COLORS['green'], 3)
+
+            if self.is_focused:
+                progress = min(self.focus_duration / FOCUS_REQUIRED_TIME, 1.0)
+                bar_x = self.screen_width // 2 - 150
+                cv2.rectangle(frame, (bar_x, 28), (bar_x + 300, 53), (60, 60, 60), -1)
+                cv2.rectangle(frame, (bar_x, 28), (bar_x + int(300 * progress), 53), COLORS['green'], -1)
+
+            # Durum
+            if self.eyes_valid:
+                status_text, status_color = "GOZ OK", COLORS['green']
+            elif self.face_detected:
+                status_text, status_color = "GOZ YOK", COLORS['orange']
+            else:
+                status_text, status_color = "YUZ YOK", COLORS['red']
+            cv2.putText(frame, status_text, (self.screen_width - 150, 55),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, status_color, 2)
+
+            # Mesajlar
+            if self.warning_message and time.time() - self.warning_time < 1.5:
+                cv2.putText(frame, self.warning_message, (self.screen_width // 2 - 150, self.screen_height // 2),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.2, COLORS['red'], 3)
+            if self.success_message and time.time() - self.success_time < 1.5:
+                cv2.putText(frame, self.success_message, (self.screen_width // 2 - 100, self.screen_height // 2),
+                            cv2.FONT_HERSHEY_SIMPLEX, 2, COLORS['green'], 4)
+
+            cv2.putText(frame, "R = Yeniden Kalibrasyon | Q = Cikis", (self.screen_width // 2 - 250, self.screen_height - 15),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, COLORS['gray'], 2)
+            return frame
+
+        def reset_calibration(self):
+            self.is_calibrated = False
+            self.current_calibration_index = 0
+            self.calibration_hold_time = 0
+            self.gaze_history_x.clear()
+            self.gaze_history_y.clear()
+            for point in self.calibration_points.values():
+                point['iris'] = None
+            print("Yeniden kalibrasyon baslatiliyor...")
+
+        def run(self):
+            print("\n" + "=" * 60)
+            print("GOZ ODAK TAKIP OYUNU - MediaPipe Edition")
+            print("=" * 60)
+            
+            while True:
+                ret, frame = self.cap.read()
+                if not ret:
+                    print("Kamera okunamadi!")
+                    break
+
+                frame = cv2.flip(frame, 1)
+                frame = self.detect_face(frame)
+
+                if not self.is_calibrated:
+                    frame = self.run_calibration(frame)
+                else:
+                    self.update_ball()
+                    self.check_focus()
+                    frame = self.draw_ui(frame)
+
+                cv2.imshow('Goz Odak Takip Oyunu', frame)
+
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('q'):
+                    break
+                elif key == ord('r'):
+                    self.reset_calibration()
+
+            self.cap.release()
+            cv2.destroyAllWindows()
+            self.face_mesh.close()
+            print(f"\nOYUN BITTI! Toplam skor: {self.score}")
+
+    trainer = EyeFocusTrainer()
+    trainer.run()
+
+
+# =====================================================================
+# ANA MENÜ
+# =====================================================================
+
+def show_main_menu():
+    """Ana menü ekranı"""
+    WIDTH, HEIGHT = 800, 600
+    
+    while True:
+        screen = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+        
+        # Başlık
+        cv2.putText(screen, "GAMER REFLEX TRAINER", (150, 80),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
+        
+        # Menü seçenekleri
+        cv2.putText(screen, "[1] Mouse Refleks Testi", (200, 200),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        cv2.putText(screen, "[2] Klavye Refleks Testi", (200, 280),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        
+        if MEDIAPIPE_AVAILABLE:
+            cv2.putText(screen, "[3] Goz Odak Takip Testi", (200, 360),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        else:
+            cv2.putText(screen, "[3] Goz Takip (MediaPipe gerekli)", (200, 360),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (100, 100, 100), 2)
+        
+        cv2.putText(screen, "[ESC] Cikis", (200, 480),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (150, 150, 150), 2)
+        
+        cv2.imshow("Gamer Reflex Trainer", screen)
+        
+        key = cv2.waitKey(100) & 0xFF
+        
+        if key == ord('1'):
+            cv2.destroyAllWindows()
+            stage_1_mouse_test()
+        elif key == ord('2'):
+            cv2.destroyAllWindows()
+            stage_2_keyboard_test()
+        elif key == ord('3'):
+            cv2.destroyAllWindows()
+            stage_3_eye_tracking()
+        elif key == 27:  # ESC
+            break
+    
+    cv2.destroyAllWindows()
+
+
+# =====================================================================
 # PROGRAM BAŞLANGICI
-# =====================
+# =====================================================================
+
 if __name__ == "__main__":
-    stage_1_mouse_test()
+    show_main_menu()
