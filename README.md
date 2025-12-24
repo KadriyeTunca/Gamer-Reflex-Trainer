@@ -131,31 +131,102 @@ Bu yapı sayesinde:
 
 ## Kurulum ve Çalıştırma
 
-### 1. Projeyi klonlayın
+### 1. Python 3.10 (64-bit) Kurulumu
+
+> ⚠️ **ÖNEMLİ:** MediaPipe sadece **64-bit Python** ile çalışır! 32-bit sürüm çalışmaz.
+
+1. [Python İndirme Sayfası](https://www.python.org/downloads/windows/)'na git
+2. **"Windows installer (64-bit)"** seçeneğini indir
+3. Kurulum sırasında:
+   - ✅ **"Add Python to PATH"** kutusunu **mutlaka işaretle**
+   - "Install Now" tıkla
+
+---
+
+### 2. Python'u Sistem Ortam Değişkenlerine (PATH) Ekleme
+
+Eğer kurulum sırasında PATH'e eklemediysen, manuel olarak ekle:
+
+1. **Windows + R** bas, `sysdm.cpl` yaz, Enter
+2. **"Gelişmiş"** sekmesine git
+3. **"Ortam Değişkenleri"** butonuna tıkla
+4. **"Sistem Değişkenleri"** bölümünde **"Path"** satırını seç, **"Düzenle"** tıkla
+5. **"Yeni"** butonuna tıkla ve şu yolları ekle:
+
+```
+C:\Users\kadri\AppData\Local\Programs\Python\Python310\
+C:\Users\kadri\AppData\Local\Programs\Python\Python310\Scripts\
+```
+
+6. Tüm pencereleri **Tamam** ile kapat
+7. **PowerShell'i kapat ve yeniden aç** (değişikliklerin aktif olması için)
+
+**Test etmek için:**
+```powershell
+python --version
+```
+Çıktı: `Python 3.10.x` gibi olmalı.
+
+---
+
+### 3. MediaPipe ve Gerekli Kütüphaneleri Kurma
+
+> ⚠️ **ÖNEMLİ:** MediaPipe'ın **0.10.9** sürümünü kurmalısın! Yeni sürümler (0.10.31+) API değişikliği nedeniyle çalışmaz.
+
+PowerShell'de şu komutu çalıştır:
+
+```powershell
+python -m pip install mediapipe==0.10.9 opencv-python numpy
+```
+
+Eğer `python` komutu çalışmazsa, tam yol ile dene:
+
+```powershell
+& "C:\Users\kadri\AppData\Local\Programs\Python\Python310\python.exe" -m pip install mediapipe==0.10.9 opencv-python numpy
+```
+
+---
+
+### 4. Projeyi Klonla veya İndir
 
 ```bash
 git clone https://github.com/KadriyeTunca/Gamer-Reflex-Trainer.git
 cd Gamer-Reflex-Trainer
 ```
 
-### 2. (Önerilen) Sanal ortam oluşturun
+---
 
-```bash
-python -m venv venv
-venv\Scripts\activate
+### 5. Göz Takibi Uygulamasını Çalıştır
+
+```powershell
+python eye_focus_trainer.py
 ```
 
-### 3. Gerekli kütüphaneleri yükleyin
+Veya tam yol ile:
 
-```bash
-pip install -r requirements.txt
+```powershell
+& "C:\Users\kadri\AppData\Local\Programs\Python\Python310\python.exe" eye_focus_trainer.py
 ```
 
-### 4. Uygulamayı çalıştırın
+---
 
-```bash
-python main.py
-```
+### 6. Kullanım
+
+- **Kalibrasyon:** Uygulama açıldığında ekranda beliren kırmızı noktalara **gözlerinizle** bakın (başınızı hareket ettirmeyin)
+- **Oyun:** Mor hedefi gözlerinizle topu takip ederek üzerine getirin ve 1 saniye tutun
+- **R tuşu:** Yeniden kalibrasyon
+- **Q tuşu:** Çıkış
+
+---
+
+### Sorun Giderme
+
+| Hata | Çözüm |
+|------|-------|
+| `pip is not recognized` | PATH'e Python ekle (yukarıdaki 2. adım) |
+| `No matching distribution found for mediapipe` | 64-bit Python kurmalısın |
+| `module 'mediapipe' has no attribute 'solutions'` | `mediapipe==0.10.9` sürümünü kur |
+| Mor hedef hareket etmiyor | Kalibrasyonu yeniden yap (R tuşu) |
 
 ---
 

@@ -32,8 +32,12 @@ FOCUS_REQUIRED_TIME = 1.0  # Saniye
 POINT_REWARD = 5
 
 # Smoothing ve stabilizasyon
-SMOOTHING_FACTOR = 0.12  # Düşük = daha yumuşak
-GAZE_HISTORY_SIZE = 8  # Ortalama için son N frame
+SMOOTHING_FACTOR = 0.22  # Daha hızlı tepki - rahat takip için
+GAZE_HISTORY_SIZE = 6  # Daha az gecikme
+
+# Odak kaybı toleransı (stabilizasyon için)
+FOCUS_LOSS_TOLERANCE = 0.5  # Saniye - küçük refleksleri tolere et
+FOCUS_DECAY_RATE = 0.3  # Odak kaybında ne kadar hızlı düşsün
 
 # MediaPipe güven eşikleri
 DETECTION_CONFIDENCE = 0.7
@@ -41,6 +45,7 @@ TRACKING_CONFIDENCE = 0.7
 
 # Kalibrasyon
 CALIBRATION_HOLD_TIME = 2.0  # Saniye
+CALIBRATION_STABILITY_THRESHOLD = 0.04  # İris hareketi toleransı (gevşetildi)
 
 # Renkler (BGR formatında)
 COLORS = {
@@ -142,6 +147,10 @@ class EyeFocusTrainer:
         self.warning_time = 0
         self.success_message = ""
         self.success_time = 0
+        
+        # Stabilizasyon için ek değişkenler
+        self.focus_loss_start = None  # Odak kaybının başladığı zaman
+        self.accumulated_focus = 0.0  # Biriken odak süresi (toleranslı)
     
     def _init_eye_tracking(self):
         """Göz takip verilerini başlat"""
@@ -180,6 +189,9 @@ class EyeFocusTrainer:
         self.iris_right = None
         self.iris_top = None
         self.iris_bottom = None
+        
+        # Kalibrasyon stabilitesi için
+        self.calibration_iris_history = []
 
     # ============================================
     # TOP KONTROLÜ
@@ -352,13 +364,45 @@ class EyeFocusTrainer:
         
         # İlerlemeyi işle
         if self.face_detected and self.eyes_valid:
-            self.calibration_hold_time += 1 / 30.0
-            self._draw_calibration_progress(frame)
+            # İris stabilitesini kontrol et
+            self.calibration_iris_history.append((self.iris_x, self.iris_y))
             
-            if self.calibration_hold_time >= CALIBRATION_HOLD_TIME:
-                self.calibration_points[current_point_name]['iris'] = (self.iris_x, self.iris_y)
-                self.current_calibration_index += 1
-                self.calibration_hold_time = 0
+            # Son 15 frame'i tut
+            if len(self.calibration_iris_history) > 15:
+                self.calibration_iris_history.pop(0)
+            
+            # Stabilite kontrolü - son 8 frame'de iris ne kadar hareket etti?
+            is_stable = True
+            if len(self.calibration_iris_history) >= 8:
+                recent = self.calibration_iris_history[-8:]
+                x_values = [p[0] for p in recent]
+                y_values = [p[1] for p in recent]
+                x_range = max(x_values) - min(x_values)
+                y_range = max(y_values) - min(y_values)
+                
+                if x_range > CALIBRATION_STABILITY_THRESHOLD or y_range > CALIBRATION_STABILITY_THRESHOLD:
+                    is_stable = False
+            else:
+                is_stable = True  # Yeterli veri yoksa kabul et
+            
+            if is_stable:
+                self.calibration_hold_time += 1 / 30.0
+                self._draw_calibration_progress(frame)
+                
+                if self.calibration_hold_time >= CALIBRATION_HOLD_TIME:
+                    # Stabil pozisyonun ortalamasını al
+                    recent = self.calibration_iris_history[-8:] if len(self.calibration_iris_history) >= 8 else self.calibration_iris_history
+                    avg_x = sum(p[0] for p in recent) / len(recent)
+                    avg_y = sum(p[1] for p in recent) / len(recent)
+                    self.calibration_points[current_point_name]['iris'] = (avg_x, avg_y)
+                    self.current_calibration_index += 1
+                    self.calibration_hold_time = 0
+                    self.calibration_iris_history.clear()
+            else:
+                # Stabil değil - ilerlemeyi yavaşça azalt
+                self.calibration_hold_time = max(0, self.calibration_hold_time - 0.05)
+                cv2.putText(frame, "SABIT BAKIN!", (self.screen_width // 2 - 100, self.screen_height // 2 + 80),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, COLORS['orange'], 2)
         else:
             self.calibration_hold_time = max(0, self.calibration_hold_time - 0.1)
             status = "YUZ TESPIT EDILEMIYOR!" if not self.face_detected else "GOZ TESPIT EDILEMIYOR!"
@@ -484,7 +528,7 @@ class EyeFocusTrainer:
         
         # Ekran koordinatlarına çevir
         target_x = int(self.screen_width / 2 + norm_x * (self.screen_width / 2 - 100))
-        target_y = int(self.screen_height / 2 + norm_y * (self.screen_height / 2 - 100))
+        target_y = int(self.screen_height / 2 + norm_y * (self.screen_height / 2 - 50))  # Y için daha geniş alan
         
         # Geçmiş değerlere ekle
         self.gaze_history_x.append(target_x)
@@ -501,7 +545,17 @@ class EyeFocusTrainer:
             avg_x = target_x
             avg_y = target_y
         
-        # Ek smoothing
+        # Ani büyük sıçramaları sınırla (ama çok kısıtlayıcı olmasın)
+        max_jump = 150  # piksel - makul bir limit
+        delta_x = avg_x - self.prev_gaze_x
+        delta_y = avg_y - self.prev_gaze_y
+        
+        if abs(delta_x) > max_jump:
+            avg_x = self.prev_gaze_x + (max_jump if delta_x > 0 else -max_jump)
+        if abs(delta_y) > max_jump:
+            avg_y = self.prev_gaze_y + (max_jump if delta_y > 0 else -max_jump)
+        
+        # Smoothing uygula
         self.gaze_x = int(self.prev_gaze_x + (avg_x - self.prev_gaze_x) * SMOOTHING_FACTOR)
         self.gaze_y = int(self.prev_gaze_y + (avg_y - self.prev_gaze_y) * SMOOTHING_FACTOR)
         
@@ -517,9 +571,16 @@ class EyeFocusTrainer:
     # ============================================
 
     def check_focus(self):
-        """Odaklanma durumunu kontrol et"""
+        """Odaklanma durumunu kontrol et - Stabilize edilmiş versiyon"""
         if not self.eyes_valid or not self.is_calibrated:
-            self._reset_focus()
+            # Göz tespit edilemezse tolerans süresi kadar bekle
+            if self.is_focused and self.focus_loss_start is None:
+                self.focus_loss_start = time.time()
+            
+            if self.focus_loss_start:
+                loss_duration = time.time() - self.focus_loss_start
+                if loss_duration > FOCUS_LOSS_TOLERANCE:
+                    self._reset_focus()
             return
         
         self.calculate_gaze()
@@ -527,29 +588,49 @@ class EyeFocusTrainer:
         distance = calculate_distance(self.gaze_x, self.gaze_y, self.ball_x, self.ball_y)
         
         if distance < FOCUS_THRESHOLD:
+            # Odak içinde - kayıp zamanlayıcısını sıfırla
+            self.focus_loss_start = None
+            
             if not self.is_focused:
                 self.is_focused = True
                 self.focus_start_time = time.time()
+                self.accumulated_focus = 0.0
             else:
                 self.focus_duration = time.time() - self.focus_start_time
+                self.accumulated_focus = self.focus_duration
                 
-                if self.focus_duration >= FOCUS_REQUIRED_TIME:
+                if self.accumulated_focus >= FOCUS_REQUIRED_TIME:
                     self.score += POINT_REWARD
                     self.success_message = f"+{POINT_REWARD} PUAN!"
                     self.success_time = time.time()
                     self._reset_focus()
                     self.reset_ball()
         else:
-            if self.is_focused and self.focus_duration > 0.2:
-                self.warning_message = "Odak kaybedildi!"
-                self.warning_time = time.time()
-            self._reset_focus()
+            # Odak dışında - tolerans kontrolü
+            if self.is_focused:
+                if self.focus_loss_start is None:
+                    # İlk kayıp anı
+                    self.focus_loss_start = time.time()
+                else:
+                    loss_duration = time.time() - self.focus_loss_start
+                    
+                    if loss_duration > FOCUS_LOSS_TOLERANCE:
+                        # Tolerans aşıldı - odağı kaybet
+                        if self.accumulated_focus > 0.3:
+                            self.warning_message = "Odak kaybedildi!"
+                            self.warning_time = time.time()
+                        self._reset_focus()
+                    # else: Tolerans içinde - odağı koru, biriken süreyi düşür
+                    elif self.accumulated_focus > 0:
+                        self.accumulated_focus -= FOCUS_DECAY_RATE * (1/30)  # Frame başına azalt
 
     def _reset_focus(self):
         """Odak durumunu sıfırla"""
         self.is_focused = False
         self.focus_start_time = None
         self.focus_duration = 0.0
+        self.focus_loss_start = None
+        self.accumulated_focus = 0.0
 
     # ============================================
     # ARAYÜZ ÇİZİMİ
