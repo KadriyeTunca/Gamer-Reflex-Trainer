@@ -24,6 +24,160 @@ except ImportError:
     print("UYARI: MediaPipe kurulu değil. Göz takibi özelliği devre dışı.")
     print("Kurmak için: pip install mediapipe==0.10.9")
 
+# Global oyuncu bilgileri
+player_name = ""
+all_stage_results = []  # Her aşamanın sonuçlarını tutar
+
+
+def get_player_name():
+    """İsim giriş ekranı"""
+    global player_name
+    WIDTH, HEIGHT = 800, 600
+    name = ""
+    
+    while True:
+        screen = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+        
+        cv2.putText(screen, "GAMER REFLEX TRAINER", (150, 100),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
+        cv2.putText(screen, "Adinizi girin:", (280, 250),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        
+        # İsim kutusu
+        cv2.rectangle(screen, (200, 280), (600, 340), (50, 50, 50), -1)
+        cv2.rectangle(screen, (200, 280), (600, 340), (0, 255, 0), 2)
+        cv2.putText(screen, name + "_", (220, 325),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
+        
+        cv2.putText(screen, "ENTER = Basla | BACKSPACE = Sil", (220, 420),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (150, 150, 150), 2)
+        
+        cv2.imshow("Gamer Reflex Trainer", screen)
+        key = cv2.waitKey(50) & 0xFF
+        
+        if key == 13 and len(name) > 0:  # ENTER
+            player_name = name
+            cv2.destroyAllWindows()
+            return
+        elif key == 8 and len(name) > 0:  # BACKSPACE
+            name = name[:-1]
+        elif key == 27:  # ESC
+            cv2.destroyAllWindows()
+            return None
+        elif 32 <= key <= 126 and len(name) < 15:  # Printable chars
+            name += chr(key)
+
+
+def show_stage_stats(stage_name, correct, total, avg_reaction, next_stage=None):
+    """Aşama sonrası istatistik ekranı"""
+    global all_stage_results
+    WIDTH, HEIGHT = 900, 650
+    
+    accuracy = (correct / total * 100) if total > 0 else 0
+    all_stage_results.append({
+        'stage': stage_name, 'correct': correct, 'total': total,
+        'accuracy': accuracy, 'avg_reaction': avg_reaction
+    })
+    
+    while True:
+        screen = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+        
+        cv2.putText(screen, f"{stage_name}", (300, 80),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 255, 255), 3)
+        cv2.putText(screen, "TAMAMLANDI!", (340, 130),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(screen, f"Oyuncu: {player_name}", (340, 180),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
+        
+        cv2.putText(screen, f"Dogru: {correct}/{total}", (300, 260),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+        cv2.putText(screen, f"Dogruluk: %{accuracy:.1f}", (300, 310),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+        cv2.putText(screen, f"Ort. Tepki: {avg_reaction:.3f}s", (300, 360),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+        
+        if next_stage:
+            cv2.putText(screen, "[ENTER] Devam", (340, 450),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+        cv2.putText(screen, "[ESC] Ana Menu", (300, 510),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (150, 150, 150), 2)
+        
+        cv2.imshow("Sonuclar", screen)
+        key = cv2.waitKey(100) & 0xFF
+        
+        if key == 13:  # ENTER
+            cv2.destroyAllWindows()
+            return True
+        elif key == 27:  # ESC
+            cv2.destroyAllWindows()
+            return False
+
+
+def show_final_evaluation():
+    """Tüm aşamalar sonrası final değerlendirmesi"""
+    global all_stage_results
+    WIDTH, HEIGHT = 900, 700
+    
+    if not all_stage_results:
+        return
+    
+    total_correct = sum(r['correct'] for r in all_stage_results)
+    total_all = sum(r['total'] for r in all_stage_results)
+    avg_accuracy = sum(r['accuracy'] for r in all_stage_results) / len(all_stage_results)
+    avg_reaction = sum(r['avg_reaction'] for r in all_stage_results if r['avg_reaction'] > 0)
+    avg_reaction = avg_reaction / len([r for r in all_stage_results if r['avg_reaction'] > 0]) if avg_reaction > 0 else 0
+    
+    # Değerlendirme
+    if avg_reaction < 0.4 and avg_accuracy >= 85:
+        rating = "MUKEMMELSIN!"
+        rating_color = (0, 255, 255)
+    elif avg_reaction < 0.6 and avg_accuracy >= 70:
+        rating = "Cok iyi!"
+        rating_color = (0, 255, 0)
+    elif avg_accuracy >= 50:
+        rating = "Fena degil"
+        rating_color = (0, 165, 255)
+    else:
+        rating = "Pratik yap!"
+        rating_color = (0, 0, 255)
+    
+    while True:
+        screen = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+        
+        cv2.putText(screen, "FINAL DEGERLENDIRMESI", (220, 70),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.4, (0, 255, 255), 3)
+        cv2.putText(screen, f"Oyuncu: {player_name}", (350, 120),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (200, 200, 200), 2)
+        
+        y = 180
+        for r in all_stage_results:
+            text = f"{r['stage']}: %{r['accuracy']:.0f} - {r['avg_reaction']:.3f}s"
+            cv2.putText(screen, text, (200, y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+            y += 50
+        
+        cv2.line(screen, (150, y), (750, y), (100, 100, 100), 2)
+        y += 40
+        
+        cv2.putText(screen, f"Toplam Dogru: {total_correct}/{total_all}", (200, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(screen, f"Genel Dogruluk: %{avg_accuracy:.1f}", (200, y + 50),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        cv2.putText(screen, f"Ort. Tepki Suresi: {avg_reaction:.3f}s", (200, y + 100),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        
+        cv2.putText(screen, rating, (300, y + 180),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.8, rating_color, 4)
+        
+        cv2.putText(screen, "[ESC] Cikis", (380, HEIGHT - 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (150, 150, 150), 2)
+        
+        cv2.imshow("Final", screen)
+        if cv2.waitKey(100) & 0xFF == 27:
+            cv2.destroyAllWindows()
+            all_stage_results = []
+            return
+
 
 # =====================================================================
 # STAGE 1: MOUSE REFLEKS TESTİ
@@ -192,6 +346,8 @@ def stage_1_mouse_test():
             break
 
     cv2.destroyAllWindows()
+    avg_reaction = np.mean(reaction_times) if reaction_times else 0
+    return correct_clicks, total_rounds, avg_reaction
 
 
 # =====================================================================
@@ -378,6 +534,7 @@ def stage_2_keyboard_test():
 
     print(f"\nOYUN BİTTİ! Doğruluk: {accuracy:.1f}%, Ort. Reaksiyon: {avg_reaction:.3f}s")
     cv2.destroyAllWindows()
+    return correct_moves, total_moves, avg_reaction
 
 
 # =====================================================================
@@ -880,14 +1037,93 @@ def stage_3_eye_tracking():
             cv2.destroyAllWindows()
             self.face_mesh.close()
             print(f"\nOYUN BITTI! Toplam skor: {self.score}")
+            return self.score
 
     trainer = EyeFocusTrainer()
-    trainer.run()
+    score = trainer.run()
+    # Eye tracking returns score as success count, 10 total rounds assumed
+    return score if score else 0, 10, 0.0
 
 
 # =====================================================================
 # ANA MENÜ
 # =====================================================================
+
+def show_next_stage_screen(current_stage, next_stage_name):
+    """Sonraki aşamaya geçiş ekranı"""
+    global player_name
+    WIDTH, HEIGHT = 900, 650
+    
+    while True:
+        screen = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+        
+        cv2.putText(screen, f"Tebrikler {player_name}!", (280, 100),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255), 3)
+        cv2.putText(screen, f"{current_stage} tamamlandi!", (300, 180),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+        
+        # Next Stage butonu
+        cv2.rectangle(screen, (250, 280), (650, 380), (0, 100, 0), -1)
+        cv2.rectangle(screen, (250, 280), (650, 380), (0, 255, 0), 3)
+        cv2.putText(screen, f"NEXT: {next_stage_name}", (280, 340),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+        
+        cv2.putText(screen, "[ENTER] Devam | [ESC] Cikis", (300, 480),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (150, 150, 150), 2)
+        
+        cv2.imshow("Sonraki Asama", screen)
+        key = cv2.waitKey(100) & 0xFF
+        
+        if key == 13:  # ENTER
+            cv2.destroyAllWindows()
+            return True
+        elif key == 27:  # ESC
+            cv2.destroyAllWindows()
+            return False
+
+
+def run_all_stages():
+    """Tüm aşamaları sırayla çalıştır"""
+    global all_stage_results, player_name
+    all_stage_results = []
+    
+    # İsim al
+    cv2.destroyAllWindows()
+    get_player_name()
+    if not player_name:
+        return
+    
+    # Stage 1
+    cv2.destroyAllWindows()
+    stats = stage_1_mouse_test()
+    if stats:
+        correct, total, avg_rt = stats
+        show_stage_stats("Stage 1: Mouse", correct, total, avg_rt, "Stage 2")
+        if not show_next_stage_screen("Stage 1: Mouse", "Stage 2: Keyboard"):
+            return
+    
+    # Stage 2
+    cv2.destroyAllWindows()
+    stats = stage_2_keyboard_test()
+    if stats:
+        correct, total, avg_rt = stats
+        show_stage_stats("Stage 2: Keyboard", correct, total, avg_rt, "Stage 3")
+        if MEDIAPIPE_AVAILABLE:
+            if not show_next_stage_screen("Stage 2: Keyboard", "Stage 3: Eye"):
+                return
+    
+    # Stage 3
+    cv2.destroyAllWindows()
+    if MEDIAPIPE_AVAILABLE:
+        stats = stage_3_eye_tracking()
+        if stats:
+            correct, total, avg_rt = stats
+            show_stage_stats("Stage 3: Eye", correct, total, avg_rt)
+    
+    # Final değerlendirme
+    show_final_evaluation()
+
+
 
 def show_main_menu():
     """Ana menü ekranı"""
@@ -896,37 +1132,41 @@ def show_main_menu():
     while True:
         screen = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
         
-        # Başlık
         cv2.putText(screen, "GAMER REFLEX TRAINER", (150, 80),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
         
-        # Menü seçenekleri
-        cv2.putText(screen, "[1] Mouse Refleks Testi", (200, 200),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-        cv2.putText(screen, "[2] Klavye Refleks Testi", (200, 280),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        # Büyük BAŞLA butonu
+        cv2.rectangle(screen, (250, 180), (550, 280), (0, 100, 0), -1)
+        cv2.rectangle(screen, (250, 180), (550, 280), (0, 255, 0), 3)
+        cv2.putText(screen, "BASLA", (330, 245),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
+        cv2.putText(screen, "(Tum asamalar)", (310, 300),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (150, 150, 150), 2)
         
+        cv2.putText(screen, "[1] Sadece Mouse Testi", (200, 380),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
+        cv2.putText(screen, "[2] Sadece Klavye Testi", (200, 420),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
         if MEDIAPIPE_AVAILABLE:
-            cv2.putText(screen, "[3] Goz Odak Takip Testi", (200, 360),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-        else:
-            cv2.putText(screen, "[3] Goz Takip (MediaPipe gerekli)", (200, 360),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (100, 100, 100), 2)
+            cv2.putText(screen, "[3] Sadece Goz Testi", (200, 460),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
         
-        cv2.putText(screen, "[ESC] Cikis", (200, 480),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (150, 150, 150), 2)
+        cv2.putText(screen, "[ENTER] Basla | [ESC] Cikis", (240, 550),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (100, 100, 100), 2)
         
         cv2.imshow("Gamer Reflex Trainer", screen)
-        
         key = cv2.waitKey(100) & 0xFF
         
-        if key == ord('1'):
+        if key == 13:  # ENTER - Tüm aşamalar
+            cv2.destroyAllWindows()
+            run_all_stages()
+        elif key == ord('1'):
             cv2.destroyAllWindows()
             stage_1_mouse_test()
         elif key == ord('2'):
             cv2.destroyAllWindows()
             stage_2_keyboard_test()
-        elif key == ord('3'):
+        elif key == ord('3') and MEDIAPIPE_AVAILABLE:
             cv2.destroyAllWindows()
             stage_3_eye_tracking()
         elif key == 27:  # ESC
@@ -941,3 +1181,4 @@ def show_main_menu():
 
 if __name__ == "__main__":
     show_main_menu()
+
