@@ -637,6 +637,13 @@ def stage_3_eye_tracking():
             self.success_time = 0
             self.focus_loss_start = None
             self.accumulated_focus = 0.0
+            
+            # CSV logging for eye tracking
+            self.focus_events = []  # List to store all focus events
+            self.game_start_time = time.time()
+            self.total_focus_attempts = 0
+            self.successful_focuses = 0
+            self.focus_durations = []  # List to store successful focus durations
 
         def _init_eye_tracking(self):
             self.iris_x = 0.5
@@ -840,33 +847,56 @@ def stage_3_eye_tracking():
             if not all([self.iris_center, self.iris_left, self.iris_right, self.iris_top, self.iris_bottom]):
                 return
 
+            # Get calibration ranges
             center_x = self.iris_center[0]
-            left_x = self.iris_left[0]
-            right_x = self.iris_right[0]
-
-            if self.iris_x < center_x:
-                range_x = center_x - left_x
-                norm_x = -(center_x - self.iris_x) / range_x if range_x > 0.001 else 0
-            else:
-                range_x = right_x - center_x
-                norm_x = (self.iris_x - center_x) / range_x if range_x > 0.001 else 0
-
             center_y = self.iris_center[1]
-            top_y = self.iris_top[1]
-            bottom_y = self.iris_bottom[1]
-
-            if self.iris_y < center_y:
-                range_y = center_y - top_y
-                norm_y = -(center_y - self.iris_y) / range_y if range_y > 0.001 else 0
+            
+            # Calculate X position relative to center
+            # Note: When looking LEFT, iris moves RIGHT in the eye (towards nose)
+            # When looking RIGHT, iris moves LEFT in the eye (towards ear)
+            # So we need to INVERT the X direction
+            
+            diff_x = self.iris_x - center_x
+            diff_y = self.iris_y - center_y
+            
+            # Get the range from calibration
+            left_range = abs(center_x - self.iris_left[0]) if self.iris_left[0] != center_x else 0.05
+            right_range = abs(self.iris_right[0] - center_x) if self.iris_right[0] != center_x else 0.05
+            top_range = abs(center_y - self.iris_top[1]) if self.iris_top[1] != center_y else 0.05
+            bottom_range = abs(self.iris_bottom[1] - center_y) if self.iris_bottom[1] != center_y else 0.05
+            
+            # Normalize based on direction
+            if diff_x < 0:
+                # Looking towards left side of calibration
+                norm_x = diff_x / left_range if left_range > 0.001 else 0
             else:
-                range_y = bottom_y - center_y
-                norm_y = (self.iris_y - center_y) / range_y if range_y > 0.001 else 0
+                # Looking towards right side of calibration  
+                norm_x = diff_x / right_range if right_range > 0.001 else 0
+                
+            if diff_y < 0:
+                norm_y = diff_y / top_range if top_range > 0.001 else 0
+            else:
+                norm_y = diff_y / bottom_range if bottom_range > 0.001 else 0
 
+            # Clamp values
             norm_x = clamp(norm_x, -1.5, 1.5)
             norm_y = clamp(norm_y, -1.5, 1.5)
-
-            target_x = int(self.screen_width / 2 + norm_x * (self.screen_width / 2 - 100))
-            target_y = int(self.screen_height / 2 + norm_y * (self.screen_height / 2 - 50))
+            
+            # Amplification factors - makes gaze tracking more responsive
+            X_AMPLIFICATION = 1.8  # Horizontal sensitivity boost
+            Y_AMPLIFICATION = 1.8  # Vertical sensitivity boost
+            
+            norm_x = norm_x * X_AMPLIFICATION
+            norm_y = norm_y * Y_AMPLIFICATION
+            
+            # Re-clamp after amplification
+            norm_x = clamp(norm_x, -1.5, 1.5)
+            norm_y = clamp(norm_y, -1.5, 1.5)
+            
+            # Use consistent margins for both axes
+            EDGE_MARGIN = 60  # Reduced margin = more range
+            target_x = int(self.screen_width / 2 + norm_x * (self.screen_width / 2 - EDGE_MARGIN))
+            target_y = int(self.screen_height / 2 + norm_y * (self.screen_height / 2 - EDGE_MARGIN))
 
             self.gaze_history_x.append(target_x)
             self.gaze_history_y.append(target_y)
@@ -922,6 +952,22 @@ def stage_3_eye_tracking():
                         self.score += POINT_REWARD
                         self.success_message = f"+{POINT_REWARD} PUAN!"
                         self.success_time = time.time()
+                        
+                        # Log successful focus event to CSV data
+                        self.successful_focuses += 1
+                        self.focus_durations.append(self.focus_duration)
+                        self.focus_events.append({
+                            'zaman': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            'olay_turu': 'BASARILI_ODAK',
+                            'odak_suresi': round(self.focus_duration, 3),
+                            'goz_x': self.gaze_x,
+                            'goz_y': self.gaze_y,
+                            'top_x': self.ball_x,
+                            'top_y': self.ball_y,
+                            'mesafe': round(calculate_distance(self.gaze_x, self.gaze_y, self.ball_x, self.ball_y), 1),
+                            'skor': self.score
+                        })
+                        
                         self._reset_focus()
                         self.reset_ball()
             else:
@@ -934,6 +980,20 @@ def stage_3_eye_tracking():
                             if self.accumulated_focus > 0.3:
                                 self.warning_message = "Odak kaybedildi!"
                                 self.warning_time = time.time()
+                                
+                                # Log failed focus event
+                                self.total_focus_attempts += 1
+                                self.focus_events.append({
+                                    'zaman': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                    'olay_turu': 'ODAK_KAYBI',
+                                    'odak_suresi': round(self.accumulated_focus, 3),
+                                    'goz_x': self.gaze_x,
+                                    'goz_y': self.gaze_y,
+                                    'top_x': self.ball_x,
+                                    'top_y': self.ball_y,
+                                    'mesafe': round(calculate_distance(self.gaze_x, self.gaze_y, self.ball_x, self.ball_y), 1),
+                                    'skor': self.score
+                                })
                             self._reset_focus()
                         elif self.accumulated_focus > 0:
                             self.accumulated_focus -= FOCUS_DECAY_RATE * (1/30)
@@ -1036,8 +1096,80 @@ def stage_3_eye_tracking():
             self.cap.release()
             cv2.destroyAllWindows()
             self.face_mesh.close()
+            
+            # Save results to CSV
+            self._save_csv_results()
+            
             print(f"\nOYUN BITTI! Toplam skor: {self.score}")
             return self.score
+        
+        def _save_csv_results(self):
+            """Save eye tracking results to CSV file"""
+            os.makedirs("results", exist_ok=True)
+            csv_file = "results/performance_log_eye_tracking.csv"
+            
+            try:
+                file_exists = os.path.isfile(csv_file)
+                with open(csv_file, 'a', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    if not file_exists:
+                        writer.writerow([
+                            "Oyuncu", "Zaman", "OlayTuru", "OdakSuresi", 
+                            "GozX", "GozY", "TopX", "TopY", "Mesafe", "Skor"
+                        ])
+                    
+                    for event in self.focus_events:
+                        writer.writerow([
+                            player_name if player_name else "Bilinmiyor",
+                            event['zaman'],
+                            event['olay_turu'],
+                            event['odak_suresi'],
+                            event['goz_x'],
+                            event['goz_y'],
+                            event['top_x'],
+                            event['top_y'],
+                            event['mesafe'],
+                            event['skor']
+                        ])
+                print(f"  - {csv_file} kaydedildi")
+            except PermissionError:
+                print(f"  UYARI: {csv_file} dosyasi acik oldugu icin kaydedilemedi!")
+                print(f"  Lutfen Excel veya baska bir programda aciksa kapatin.")
+            
+            # Also save a summary
+            summary_file = "results/eye_tracking_summary.csv"
+            summary_exists = os.path.isfile(summary_file)
+            
+            total_time = time.time() - self.game_start_time
+            avg_focus_duration = sum(self.focus_durations) / len(self.focus_durations) if self.focus_durations else 0
+            total_attempts = self.successful_focuses + self.total_focus_attempts
+            accuracy = (self.successful_focuses / total_attempts * 100) if total_attempts > 0 else 0
+            
+            try:
+                with open(summary_file, 'a', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    if not summary_exists:
+                        writer.writerow([
+                            "Oyuncu", "Tarih", "ToplamSure", "BasariliOdak", 
+                            "BasarisizOdak", "DogrulukOrani", "OrtOdakSuresi", "ToplamSkor"
+                        ])
+                    
+                    writer.writerow([
+                        player_name if player_name else "Bilinmiyor",
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        f"{total_time:.1f}",
+                        self.successful_focuses,
+                        self.total_focus_attempts,
+                        f"{accuracy:.1f}",
+                        f"{avg_focus_duration:.3f}",
+                        self.score
+                    ])
+                print(f"  - {summary_file} kaydedildi")
+            except PermissionError:
+                print(f"  UYARI: {summary_file} dosyasi acik oldugu icin kaydedilemedi!")
+                print(f"  Lutfen Excel veya baska bir programda aciksa kapatin.")
+            
+            print(f"\nSonuclar islendi.")
 
     trainer = EyeFocusTrainer()
     score = trainer.run()

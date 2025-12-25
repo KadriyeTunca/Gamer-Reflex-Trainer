@@ -4,7 +4,7 @@
 
 **Gamer Reflex Trainer**, kullanıcıların refleks, tepki süresi ve doğruluk performanslarını ölçmek amacıyla geliştirilen, çok aşamalı ve etkileşim tabanlı bir performans analiz uygulamasıdır. Proje, akademik kullanım ve bitirme çalışması kapsamında tasarlanmış olup ölçülebilir, kayıt altına alınabilir ve analiz edilebilir veriler üretmeyi hedefler.
 
-Uygulama; mouse, klavye ve göz takibi olmak üzere üç ana aşamadan oluşacak şekilde planlanmıştır. Mevcut sürümde **Mouse Refleks Testi (Stage 1)** tamamlanmış durumdadır.
+Uygulama; mouse, klavye ve göz takibi olmak üzere **üç ana aşamadan** oluşmaktadır. **Tüm aşamalar tamamlanmıştır.**
 
 ---
 
@@ -29,10 +29,15 @@ Gamer-Reflex-Trainer/
 ├── ml_data/              # İleri aşamalarda kullanılacak veri setleri
 ├── modules/              # Test aşamalarının modüler yapıları
 ├── results/              # Performans çıktı dosyaları (CSV)
-│   └── performance_log.csv
+│   ├── performance_log.csv              # Mouse testi sonuçları
+│   ├── performance_log_keyboard.csv     # Klavye testi sonuçları
+│   ├── performance_log_eye_tracking.csv # Göz takibi detaylı olaylar
+│   └── eye_tracking_summary.csv         # Göz takibi oturum özetleri
 │
 ├── main.py               # Uygulamanın ana giriş noktası
 ├── requirements.txt      # Gerekli Python kütüphaneleri
+├── setup.bat             # Otomatik kurulum scripti (Windows)
+├── run.bat               # Uygulamayı başlatma scripti (Windows)
 ├── .gitignore
 └── README.md
 ```
@@ -43,24 +48,21 @@ Gamer-Reflex-Trainer/
 
 * **Tek giriş noktası:** `main.py`
 * Her test aşaması ayrı bir fonksiyon olarak tanımlanmıştır
-* Ortak bir CSV kayıt sistemi tüm aşamalar tarafından kullanılmaktadır
+* Her aşama kendi CSV kayıt sistemine sahiptir
 
 ```text
 main.py
- └── stage_1_mouse_test()
-     ├── Başlangıç ekranı
-     ├── Oyun döngüsü
-     ├── Performans ölçümü
-     └── CSV veri kaydı
+ ├── stage_1_mouse_test()      → results/performance_log.csv
+ ├── stage_2_keyboard_test()   → results/performance_log_keyboard.csv
+ └── stage_3_eye_tracking()    → results/performance_log_eye_tracking.csv
+                               → results/eye_tracking_summary.csv
 ```
-
-Bu yapı sayesinde klavye ve göz takibi testleri mevcut kod yapısı bozulmadan sisteme eklenebilecektir.
 
 ---
 
 ## Aşamalar
 
-### Stage 1 – Mouse Refleks Testi (Tamamlandı)
+### Stage 1 – Mouse Refleks Testi ✅
 
 Bu aşamada kullanıcının mouse ile görsel hedeflere verdiği tepki süresi ölçülür.
 
@@ -81,35 +83,73 @@ Bu aşamada kullanıcının mouse ile görsel hedeflere verdiği tepki süresi �
 
 ---
 
-### Stage 2 – Klavye Refleks Testi (Planlanıyor)
+### Stage 2 – Klavye Refleks Testi ✅
 
 * W, A, S, D tuşları ile yön tabanlı refleks ölçümü
-* Merkeze yaklaşan hedef mantığı
-* Erken veya yanlış tuş basımında ceza mekanizması
-* Mouse aşaması sonrası otomatik geçiş
+* Otomatik hareket eden oyuncu karakteri
+* Doğru tuşa basıldığında hız artışı (adaptif zorluk)
+* 20 tur sonunda otomatik sonuç ekranı
+
+**Ölçülen Metrikler:**
+
+* Hedef tuş vs basılan tuş karşılaştırması
+* Tepki süresi
+* Doğruluk oranı
+* Ortalama tepki süresi
 
 ---
 
-### Stage 3 – Göz Takibi (Eye Tracking) Testi (Planlanıyor)
+### Stage 3 – Göz Takibi (Eye Tracking) Testi ✅
 
-* OpenCV tabanlı yüz ve göz tespiti
-* Bakış yönü ve odaklanma süresi analizi
-* Mouse ve klavye verileri ile karşılaştırmalı refleks değerlendirmesi
+* **MediaPipe** tabanlı gerçek zamanlı göz takibi
+* 5 noktalı kalibrasyon sistemi (merkez, sol, sağ, yukarı, aşağı)
+* Hassas bakış yönü hesaplama (X ve Y eksenleri için 1.8x amplifikasyon)
+* Hareketli topa odaklanma oyunu
+* Odak süresi ve kayıp toleransı sistemi
+
+**Özellikler:**
+
+* Gerçek zamanlı iris pozisyonu takibi
+* Adaptif smoothing (titreme önleme)
+* Her iki eksen için eşit hassasiyet
+* Odak kaybı toleransı (0.5 saniye)
+
+**Ölçülen Metrikler:**
+
+* Başarılı odaklanma sayısı
+* Odak kaybı sayısı
+* Ortalama odaklanma süresi
+* Göz-hedef mesafesi
+* Toplam skor
 
 ---
 
 ## Veri Kaydı
 
-Tüm test aşamaları tek bir CSV dosyasında kayıt altına alınır.
+Her test aşaması kendi CSV dosyasında kayıt altına alınır.
 
+### Mouse Testi
 ```text
 results/performance_log.csv
+Kolonlar: Asama, Tur, DogruMu, TepkiSuresi, HedefRenk, TiklananRenk, Zaman
 ```
 
-**CSV Kolonları:**
-
+### Klavye Testi
 ```text
-Asama, Tur, DogruMu, TepkiSuresi, HedefRenk, TiklananRenk, Zaman
+results/performance_log_keyboard.csv
+Kolonlar: Saat, Tur, HedefTus, BasilanTus, DogruMu, ReaksiyonSuresi, DogrulukOrani, OrtReaksiyon
+```
+
+### Göz Takibi - Detaylı Olaylar
+```text
+results/performance_log_eye_tracking.csv
+Kolonlar: Oyuncu, Zaman, OlayTuru, OdakSuresi, GozX, GozY, TopX, TopY, Mesafe, Skor
+```
+
+### Göz Takibi - Oturum Özeti
+```text
+results/eye_tracking_summary.csv
+Kolonlar: Oyuncu, Tarih, ToplamSure, BasariliOdak, BasarisizOdak, DogrulukOrani, OrtOdakSuresi, ToplamSkor
 ```
 
 Bu yapı sayesinde:
@@ -252,10 +292,10 @@ Veya tam yol ile:
 
 ## Gelecek Çalışmalar
 
-* Klavye refleks testinin entegrasyonu
-* Göz takibi modülünün eklenmesi
 * Performans verileri için grafiksel raporlama
 * Kullanıcı bazlı kişiselleştirilmiş analiz
+* Makine öğrenmesi ile performans tahmini
+* Farklı zorluk seviyeleri eklenmesi
 
 ---
 
